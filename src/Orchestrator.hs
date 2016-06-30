@@ -9,6 +9,7 @@ module Main
     ( main
     ) where
 
+import Control.Monad (void)
 import Network.Nats
 import System.Environment (getArgs)
 
@@ -24,11 +25,14 @@ main = do
 
 startOrchestrator :: NatsURI -> Int -> IO ()
 startOrchestrator natsUri pairs =
-    runNatsClient defaultSettings natsUri $ \conn ->
+    runNatsClient defaultSettings natsUri $ \conn -> do
         -- There's two series for item ids, one serie starting with 1
         -- and one serie starting with 10000000. Just go ahead and
         -- create the requested number of pairs.
         mapM_ (createPair conn) $ take pairs $ zip [1 ..] [10000000 ..]
+
+        putStrLn "Wait until you think registration in done. Then press key"
+        void $ getLine
 
 createPair :: Connection -> (Int, Int) -> IO ()
 createPair conn (a, b) = do
