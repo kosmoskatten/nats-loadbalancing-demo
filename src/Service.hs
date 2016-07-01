@@ -13,19 +13,21 @@ import Network.Nats
 import System.Environment (getArgs)
 
 import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Lazy.Char8 as LBS
 
 main :: IO ()
 main = do
     -- Get the URI for the NATS server from the command line.
     [natsUri] <- map BS.pack <$> getArgs
     runNatsClient defaultSettings natsUri $ \conn -> do
+        let payload = "I'm tickling you :-)"
 
         -- Once connected to the NATS server subscribe to the topic
         -- of creating an item. Creating items is part of the queue group
         -- "ITEMPOOL". All subscribers of this queue group will be load
         -- balanced through random selection by the NATS server.
         void $ subAsync conn "item.create.*" (Just "ITEMPOOL")
-                        (createItem conn)
+                        (createItem conn payload)
 
         -- Just keeping the main thread alive.
         stayAlive
@@ -33,8 +35,8 @@ main = do
 -- | Handler for the creation of topics, the topic will look like:
 -- item.create.<itemId>
 -- As payload the create message will carry the id of the item's peer.
-createItem :: Connection -> NatsMsg -> IO ()
-createItem conn (NatsMsg topic _ _ peer) = do
+createItem :: Connection -> LBS.ByteString -> NatsMsg -> IO ()
+createItem conn payload (NatsMsg topic _ _ peer) = do
     let itemId      = wildCard
         tickleTopic = "item." `BS.append` itemId `BS.append` ".tickle"
         peerTopic   = "item." `BS.append` (toS peer) `BS.append` ".tickle"
@@ -49,11 +51,11 @@ createItem conn (NatsMsg topic _ _ peer) = do
     -- | Now, for the rest of the life of this thread, continously send
     -- tickles to the peer item.
     forever $ do
-        pub' conn peerTopic "I'm tickling you :-)"
-        threadDelay oneSec
+        pub' conn peerTopic payload
+        threadDelay period
     where
       wildCard = BS.split '.' topic !! 2
-      oneSec   = 1000000
+      period   = 100000
 
 -- | Just to keep the main thread alive.
 stayAlive :: IO ()
